@@ -17,10 +17,12 @@ let score = 0;
 let lives = 2;
 let level = 1;
 let gameOverFlag = false;
+let winnerFlag = false; // New flag for winning condition
 let gameStarted = false;
 let startButton;
 let stars = [];
 let startOverButton;
+let winnerButton; // Button for restarting after winning
 
 function setup() {
     createCanvas(1200, 600);
@@ -81,7 +83,7 @@ class Mothership {
             this.fireLaser();
         }
         this.y += this.verticalSpeed * this.verticalDirection;
-        if (this.y <= 100 || this.y >= height - 100) { 
+        if (this.y <= 100 || this.y >= height - 100) { // Adjusted to prevent going off-canvas
             this.verticalDirection *= -1;
         }
     }
@@ -92,10 +94,16 @@ class Mothership {
     }
 }
 
-
+// GAME ENGINE
 function draw() {
     if (!gameStarted) {
         drawStartScreen();
+    } else if (gameOverFlag) {
+        // If game is over, do not proceed with game logic
+        // The gameOver screen is already displayed
+    } else if (winnerFlag) {
+        // If player has won, do not proceed with game logic
+        // The winner screen is already displayed
     } else {
         background(0, 10, 30);
         drawStars();
@@ -104,73 +112,83 @@ function draw() {
         moveLightShots();
         displayLightShots();
 
-        if (!gameOverFlag) {
-            if (score < 150) {
-                for (let i = gameObjects.length - 1; i >= 0; i--) {
-                    gameObjects[i].display();
-                    gameObjects[i].move();
+        if (!gameOverFlag && !winnerFlag) {
+            if (score < 1500) { // Updated threshold to 1500
+                if (score < 150) {  // Existing threshold for spawning UFOs
+                    for (let i = gameObjects.length - 1; i >= 0; i--) {
+                        gameObjects[i].display();
+                        gameObjects[i].move();
 
+                        // Collision Spaceship/UFO
+                        if (dist(gameObjects[i].x, gameObjects[i].y, x, y) < 200) {
+                            gameOver();
+                            console.log(x + "," + y);
+                        }
 
-                    if (dist(gameObjects[i].x, gameObjects[i].y, x, y) < 200) {
+                        // Contact Light shot/UFO
+                        for (let j = lightShots.length - 1; j >= 0; j--) {
+                            if (dist(gameObjects[i].x, gameObjects[i].y, lightShots[j].x, lightShots[j].y) < 50) {
+                                gameObjects.splice(i, 1);
+                                score += 10;
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    console.log("Score threshold reached.");
+                    if (!mothership) {
+                        console.log("Spawning mothership.");
+                        mothership = new Mothership(900, 300);
+                    }
+
+                    mothership.display();
+                    mothership.move();
+
+                    // Collision Spaceship/Mothership
+                    if (dist(mothership.x, mothership.y, x, y) < 200) {
                         gameOver();
                         console.log(x + "," + y);
                     }
 
+                    // Contact Light shot/Mothership
                     for (let j = lightShots.length - 1; j >= 0; j--) {
-                        if (dist(gameObjects[i].x, gameObjects[i].y, lightShots[j].x, lightShots[j].y) < 50) {
-                            gameObjects.splice(i, 1);
-                            score += 10;
+                        if (dist(mothership.x, mothership.y, lightShots[j].x, lightShots[j].y) < 50) {
+                            score += 50;
+                            mothership = null;
                             break;
                         }
                     }
-                }
-            } else {
-                console.log("Score threshold reached.");
-                if (!mothership) {
-                    console.log("Spawning mothership.");
-                    mothership = new Mothership(900, 300);
-                }
 
-                mothership.display();
-                mothership.move();
+                    // Lasers shot from Mothership
+                    for (let k = lasers.length - 1; k >= 0; k--) {
+                        lasers[k].display();
+                        lasers[k].move();
 
+                        // Contact Laser/Spaceship
+                        if (dist(lasers[k].x, lasers[k].y, x, y) < 50) {
+                            gameOver();
+                            console.log(x + "," + y);
+                        }
 
-                if (dist(mothership.x, mothership.y, x, y) < 200) {
-                    gameOver();
-                    console.log(x + "," + y);
-                }
-
-
-                for (let j = lightShots.length - 1; j >= 0; j--) {
-                    if (dist(mothership.x, mothership.y, lightShots[j].x, lightShots[j].y) < 50) {
-                        score += 50;
-                        mothership = null;
-                        break;
+                        // Remove laser if it goes off-screen
+                        if (lasers[k].x < 0) {
+                            lasers.splice(k, 1);
+                        }
                     }
                 }
 
+                y += spaceshipYSpeed;
+                y = constrain(y, 75, height - 75);
 
-                for (let k = lasers.length - 1; k >= 0; k--) {
-                    lasers[k].display();
-                    lasers[k].move();
+                updateStatScreen();
 
-
-                    if (dist(lasers[k].x, lasers[k].y, x, y) < 50) {
-                        gameOver();
-                        console.log(x + "," + y);
-                    }
-
-                    
-                    if (lasers[k].x < 0) {
-                        lasers.splice(k, 1);
-                    }
+                // Check for winning condition
+                if (score >= 1500) {
+                    winnerFlag = true;
+                    noLoop();
+                    displayWinnerScreen();
                 }
             }
-
-            y += spaceshipYSpeed;
-            y = constrain(y, 75, height - 75);
-
-            updateStatScreen();
         }
     }
 }
@@ -208,11 +226,13 @@ class Ufo {
 }  
 
 function spawnUfo() {
-    if (score < 150) {  
-        let y = Math.random() * height;
-        let newUfo = new Ufo(width, y);
-        newUfo.timer = newUfo.delay;
-        gameObjects.push(newUfo);
+    if (score < 1500) {  // Only spawn UFOs if the score is less than 1500
+        if (score < 150) { // Existing condition
+            let y = Math.random() * height;
+            let newUfo = new Ufo(width, y); // Use 'width' for canvas boundary
+            newUfo.timer = newUfo.delay;
+            gameObjects.push(newUfo);
+        }
     }
 }
 
@@ -331,35 +351,52 @@ function gameOver() {
     fill(255);
     text("Game Over", width / 2, height / 3);
     
-
+    // Create the 'Start Over' button
     startOverButton = createButton('Start Over');
-    startOverButton.position(width / 2 - 60, height / 2);
+    startOverButton.position(width / 2 - 60, height / 2); // Adjusted position for better centering
     startOverButton.mousePressed(restartGame);
     
-
+    // Style the button (optional)
     startOverButton.style('font-size', '20px');
     startOverButton.style('padding', '10px 20px');
 }
 
+function displayWinnerScreen() {
+    background(0, 255, 0); // Green background
+    textAlign(CENTER, CENTER);
+    textSize(50);
+    fill(255); // White text
+    text("You are the winner", width / 2, height / 2);
+    
+    // Create the 'Restart' button
+    winnerButton = createButton('Restart');
+    winnerButton.position(width / 2 - 50, height / 2 + 60); // Positioned below the text
+    winnerButton.mousePressed(restartGame);
+    
+    // Style the button (optional)
+    winnerButton.style('font-size', '20px');
+    winnerButton.style('padding', '10px 20px');
+}
+
 function createStartScreen() {
     startButton = createButton('Start');
-    startButton.position(width / 2 - 50, height / 2); 
+    startButton.position(width / 2 - 50, height / 2); // Center the button
     startButton.mousePressed(startGame);
     
-
+    // Style the start button (optional)
     startButton.style('font-size', '20px');
     startButton.style('padding', '10px 20px');
 }
 
 function startGame() {
     gameStarted = true;
-    startButton.remove(); 
-    loop(); 
+    startButton.remove(); // Remove the start button
+    loop(); // Ensure the draw loop is running
 }
 
 function drawStartScreen() {
-    background(0);
-    textAlign(CENTER);
+    background(0); 
+    textAlign(CENTER, CENTER);
     textSize(50);
     fill(255);
     text("Space Shooter", width / 2, height / 2 - 50);
@@ -387,37 +424,44 @@ function drawStars() {
     }
 }
 
-
+// Function to restart the game
 function restartGame() {
-
+    // Reset game variables
     score = 0;
     lives = 2;
     level = 1;
     gameOverFlag = false;
-    gameStarted = true; 
+    winnerFlag = false; // Reset winner flag
+    gameStarted = true; // Start the game immediately
     
-
+    // Clear game objects
     gameObjects = [];
     lightShots = [];
     lasers = [];
     mothership = null;
     
+    // Remove the 'Start Over' or 'Restart' button
     if (startOverButton) {
         startOverButton.remove();
         startOverButton = null;
     }
+    if (winnerButton) {
+        winnerButton.remove();
+        winnerButton = null;
+    }
     
-
+    // Reset spaceship position and speed
     x = 100;
     y = 200;
     spaceshipYSpeed = 0;
     
+    // Clear and regenerate stars
     stars = [];
     generateStars();
     
-
+    // Reset background and ensure the game starts
     background(0);
     
-
+    // Restart the draw loop
     loop();
 }
